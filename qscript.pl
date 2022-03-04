@@ -38,9 +38,7 @@ my $wallminutes;   # integer number of minutes, calculated from HH:MM:SS
 my $qscripttemplate; # template file to use for the queue submission script
 my $qscript;       # queue submission script we're producing
 my $qScriptScalar; # qscript as embedded in JSON response
-my $ppn;           # the number of processors per node
 my $cloptions="";  # command line options for adcirc, if any
-my $jobtype;       # e.g., prep15, padcirc, padcswan, etc
 my $cmd;           # the command line to execute
 my $joblauncher = "noLineHere"; # executable line in qscript (ibrun, mpirun, etc)
 #
@@ -58,13 +56,12 @@ my $jshash_ref = JSON::PP->new->decode($file_content);
 #                S E T   P A R A M E T E R S
 #
 #-----------------------------------------------------------------
-$jobtype = $jshash_ref->{'jobtype'}; # partmesh, prep15, padcirc etc
+# get jobtype, e.g., prep15, padcirc, padcswan, etc
+my $jobtype = $jshash_ref->{'jobtype'}; # partmesh, prep15, padcirc etc
 # get number of processors per node (if it is defined)
-if ( defined $jshash_ref->{"ppn"} && $jshash_ref->{"ppn"} ne "null" ) {
-    $ppn = $jshash_ref->{"ppn"};
-} else {
-    $ppn = "noLineHere";
-}
+# the number of processors per node
+my $ppn = getQueueScriptParameter($jshash_ref, "ppn");
+my $hpcenvshort = $jshash_ref->{'hpcenvshort'};
 #
 # construct command line for running adcprep or serial job
 if ( $jshash_ref->{"parallelism"} eq "serial" ) {
@@ -78,7 +75,6 @@ if ( $jshash_ref->{"parallelism"} eq "serial" ) {
         $cmd = $jshash_ref->{"cmd"};
     }
     my $serqueue = $jshash_ref->{'serqueue'};
-    my $hpcenvshort = $jshash_ref->{'hpcenvshort'};
 }
 #
 # construct command line for running padcirc, padcswan, or other parallel job
@@ -90,6 +86,7 @@ if ( $jobtype eq "padcirc" || $jobtype eq "padcswan" ){
        $cloptions .= "-S -R";
     }
     # set dedicated writer processors
+    my $numwriters = getQueueScriptParameter($jshash_ref, "numwriters");
     if ( defined $jshash_ref->{"numwriters"} &&
                  $jshash_ref->{"numwriters"} ne "null" &&
                  $jshash_ref->{"numwriters"} != 0 ) {
@@ -173,10 +170,15 @@ while(<$TEMPLATE>) {
         s/%JOBNTASKSPERNODE%/SLURM_NTASKS_PER_NODE/g;
         s/%JOBNTASKS%/SLURM_NTASKS/g;
     }
+    if ( $jshash_ref->{"queuesys"} eq "mpiexec" ||
+         $jshash_ref->{"queuesys"} eq "serial" ) {
+        s/%JOBID%/\$/g;
+        s/%JOBDIR%/PWD/g;
+        s/{%JOBHOST%}/(hostname)/g;
+    }
     # fill in the lower case name of the queueing system
     s/%queuesyslc%/$queuesyslc/g;
-    # fill in the name of the queueing system (typicall upper case in the
-    # run.properties file
+    # fill in the name of the queueing system
     s/%queuesys%/$jshash_ref->{"queuesys"}/g;
     # fill in the number of compute cores (i.e., not including writers)
     s/%ncpu%/$myNCPU/;
@@ -194,12 +196,8 @@ while(<$TEMPLATE>) {
     # the value "null" is used to represent the default
     # account for the Operator; we can omit this line
     # from the queue script
-    if ( defined $jshash_ref->{"account"} &&
-         $jshash_ref->{"account"} ne "null" ) {
-        s/%account%/$jshash_ref->{"account"}/;
-    } else {
-        s/%account%/noLineHere/;
-    }
+    my $account = getQueueScriptParameter($jshash_ref,"account");
+    s/%account%/$account/;
     # directory where adcirc executables are located
     s/%adcircdir%/$jshash_ref->{"adcircdir"}/;
     # directory where asgs executables are located
@@ -217,37 +215,16 @@ while(<$TEMPLATE>) {
     # the type of job that is being submitted (partmesh, prep15, padcirc, etc)
     s/%jobtype%/$jobtype/g;
     # the email address of the ASGS Operator
-    if ( defined $jshash_ref->{"asgsadmin"} &&
-         $jshash_ref->{"asgsadmin"} ne "null" ) {
-        s/%notifyuser%/$jshash_ref->{"asgsadmin"}/g;
-    } else {
-        s/%notifyuser%/noLineHere/g;
-    }
-    if ( $jshash_ref->{"queuesys"} eq "SLURM" ) {
-        # the SLURM reservation
-        if ( defined $jshash_ref->{"reservation"} &&
-             $jshash_ref->{"reservation"} ne "null" ) {
-            s/%reservation%/$jshash_ref->{"reservation"}/g;
-        } else {
-            s/%reservation%/noLineHere/g;
-        }
-        # the SLURM constraint
-        if ( defined $jshash_ref->{"constraint"} &&
-             $jshash_ref->{"constraint"} ne "null" ) {
-            s/%constraint%/$jshash_ref->{"constraint"}/g;
-        } else {
-            s/%constraint%/noLineHere/g;
-        }
-        # partition is not here b/c it is synonym for queuename
-        #
-        # fill in quality of service specification (if any)
-        if ( defined $jshash_ref->{"qos"} &&
-            $jshash_ref->{"qos"} ne "null" ) {
-            s/%qos%/$jshash_ref->{"qos"}/g;
-        } else {
-            s/%qos%/noLineHere/g;
-        }
-    }
+    my $notifyuser = getQueueScriptParameter($jshash_ref,"asgsadmin");
+    s/%notifyuser%/$notifyuser/;
+    # reservation, constraint, and qos are only for SLURM
+    # partition is not here b/c it is synonym for queuename
+    my $reservation = getQueueScriptParameter($jshash_ref,"reservation");
+    s/%reservation%/$reservation/;
+    my $constraint = getQueueScriptParameter($jshash_ref,"constraint");
+    s/%constraint%/$constraint/;
+    my $qos = getQueueScriptParameter($jshash_ref,"qos");
+    s/%qos%/$qos/;
     # fills in the number of nodes on platforms that require it
     s/%nnodes%/$nnodes/g;
     # fill in serial queue
@@ -279,3 +256,13 @@ ASGSUtil::writeJSON($jshash_ref);
 # write the response to STDOUT
 print JSON::PP->new->utf8->pretty->canonical->encode($jshash_ref);
 1;
+
+# if the value is null, return noLineHere
+sub getQueueScriptParameter {
+    my ( $hash_ref, $param ) = @_;
+    if ( defined $hash_ref->{$param} && $jshash_ref->{$param} ne "null" ) {
+        return $jshash_ref->{$param};
+    } else {
+        return "noLineHere";
+    }
+}
