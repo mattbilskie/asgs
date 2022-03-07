@@ -31,6 +31,7 @@ echo "lonestar5      - Lonestar (TACC)"     # ls5
 echo "stampede2      - Stampede2 (TACC)"    # stampede2
 echo "frontera       - Frontera (TACC)"     # frontera
 echo "sapelo2        - Sapelo2 (UGA)"       # sapelo2
+echo "bridges2       - Bridges2 (PSC)"      # bridges
 echo "desktop        - desktop"
 echo "desktop-serial - desktop-serial"
 echo "poseidon       - Poseidon"
@@ -87,7 +88,7 @@ case "$platform" in
     WORK=${WORK:-$HOME}
     SCRATCH=${SCRATCH:-"/scratch/$USER"}
     ;;
-  frontera|lonestar5|stampede2)
+  frontera|lonestar5|stampede2|bridges2)
     # WORK and SCRATCH assumed to be set in default env
     if [[ -z "$WORK" || -z "$SCRATCH" ]]; then
       echo "'WORK' and 'SCRATCH' are expected to be part of the default TACC environment. Please fix this."

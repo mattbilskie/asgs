@@ -497,7 +497,7 @@ init_sapelo2()
   HPCENV=sapelo2.gacrc.uga.edu
   QUEUESYS=SLURM
   QUEUENAME=manynode_p # same as SLURM partition
-  SERQUEUE=bath
+  SERQUEUE=batch
   PPN=64
   CONSTRAINT=EPYC
   RESERVATION=null
@@ -524,7 +524,42 @@ init_sapelo2()
   #ARCHIVEDIR=2022
   #TDS=( tacc_tds )
   MAKEJOBS=8
+#
+init_bridges2()
+{ #<- can replace the following with a custom script
+  local THIS="platforms.sh>env_dispatch()>init_bridges2()"
+  scenarioMessage "$THIS: Setting platforms-specific parameters."
+  HPCENV=bridges2.psc.edu
+  QUEUESYS=SLURM
+  QUEUENAME=RM-shared
+  SERQUEUE=batch
+  PPN=128
+  RESERVATION=null
+  QOS=null
+  QCHECKCMD=sacct
+  JOBLAUNCHER='mpirun '
+  ACCOUNT=null
+  SUBMITSTRING=sbatch
+  SSHKEY=~/.ssh/id_rsa.pub
+  QSCRIPTTEMPLATE=$SCRIPTDIR/qscript.template-bridges2
+  QSCRIPTGEN=qscript.pl
+  #OPENDAPPOST=opendap_post.sh #<~ $SCRIPTDIR/output/ assumed
+  QSUMMARYCMD=null
+  QUOTACHECKCMD=null
+  ALLOCCHECKCMD=null
+  if [[ ${RMQMessaging_Enable} == "on" ]]; then
+    RMQMessaging_LocationName="PSC"
+    RMQMessaging_ClusterName="bridges2"
+    RMQMessaging_NcoHome=$WORK/local
+  fi
+  local THIS="platforms.sh>env_dispatch()>init_bridges2()"
+  #ARCHIVE=enstorm_pedir_removal.sh
+  #ARCHIVEBASE=/corral-tacc/utexas/hurricane/ASGS
+  #ARCHIVEDIR=2022
+  #TDS=( tacc_tds )
+  MAKEJOBS=8
 }
+#
 # Writes properties related to the combination of the HPC platform, the Operator,
 # and the THREDDS data server the results are to be posted to.
 writeTDSProperties()
@@ -671,6 +706,10 @@ set_hpc() {
       HPCENV=sapelo2.gacrc.uga.edu
       HPCENVSHORT=sapelo2
    fi
+   if [[ ${fqdn:9:-8} = "bridges2" ]]; then
+      HPCENV=bridges2.psc.edu
+      HPCENVSHORT=bridges2
+   fi
    if [[ ${fqdn:0:5} = "jason" ]]; then
       HPCENV=desktop.seahorsecoastal.com
       HPCENVSHORT=desktop
@@ -704,6 +743,9 @@ env_dispatch() {
           ;;
   "sapelo2") allMessage "$THIS: Sapelo2 (UGA) configuration found."
           init_sapelo2
+          ;;
+  "bridges2") allMessage "$THIS: Brideges2 (PSC) configuration found."
+          init_bridges2
           ;;
   "supermike") allMessage "$THIS: Supermike (LSU) configuration found."
           init_supermike
@@ -753,7 +795,7 @@ env_dispatch() {
   "test") allMessage "$THIS: test environment (default) configuration found."
           init_test
            ;;
-  *) fatal "$THIS: '$HPCENVSHORT' is not a supported environment; currently supported options: stampede2, lonestar5, supermike, queenbee, supermic, hatteras, sapelo2, desktop, desktop-serial, docker, su_tds, lsu_ccr_tds, renci_tds, tacc_tds, tacc_tds2"
+  *) fatal "$THIS: '$HPCENVSHORT' is not a supported environment; currently supported options: stampede2, lonestar5, supermike, queenbee, supermic, hatteras, sapelo2, bridges2, desktop, desktop-serial, docker, su_tds, lsu_ccr_tds, renci_tds, tacc_tds, tacc_tds2"
      ;;
   esac
 
