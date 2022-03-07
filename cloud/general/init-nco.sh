@@ -18,7 +18,8 @@ if [ "$COMPILER" == "clean" ]; then
   exit
 fi
 
-NCO_VERSION=4.9.8
+#NCO_VERSION=4.9.8
+NCO_VERSION=5.0.4
 NCO_DIR=nco-${NCO_VERSION}
 NCO_TGZ=${NCO_VERSION}.tar.gz
 cd $_ASGS_TMP

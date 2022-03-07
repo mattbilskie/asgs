@@ -420,7 +420,7 @@ init_desktop()
   HPCENV=jason-desktop.seahorsecoastal.com
   QUEUESYS=mpiexec
   QCHECKCMD="ps -aux | grep mpiexec "
-  SUBMITSTRING="mpiexec "
+  SUBMITSTRING="mpiexec -n "
   SCRATCH=/srv/asgs
   SSHKEY=id_rsa_jason-desktop
   ADCOPTIONS='compiler=gfortran MACHINENAME=jason-desktop'
@@ -428,7 +428,7 @@ init_desktop()
   ARCHIVE=enstorm_pedir_removal.sh
   ARCHIVEBASE=$SCRATCH
   ARCHIVEDIR=$SCRATCH
-  TDS=()
+  TDS=(renci_tds)
   MAKEJOBS=1
 }
 
@@ -489,6 +489,42 @@ init_test()
   MAKEJOBS=1
 }
 #
+#
+init_sapelo2()
+{ #<- can replace the following with a custom script
+  local THIS="platforms.sh>env_dispatch()>init_sapelo2()"
+  scenarioMessage "$THIS: Setting platforms-specific parameters."
+  HPCENV=sapelo2.gacrc.uga.edu
+  QUEUESYS=SLURM
+  QUEUENAME=manynode_p # same as SLURM partition
+  SERQUEUE=bath
+  PPN=64
+  CONSTRAINT=EPYC
+  RESERVATION=null
+  QOS=null
+  QCHECKCMD=sacct
+  JOBLAUNCHER='mpirun '
+  ACCOUNT=null
+  SUBMITSTRING=sbatch
+  SSHKEY=~/.ssh/id_rsa.pub
+  QSCRIPTTEMPLATE=$SCRIPTDIR/qscript.template-sapelo2
+  QSCRIPTGEN=qscript.pl
+  #OPENDAPPOST=opendap_post.sh #<~ $SCRIPTDIR/output/ assumed
+  QSUMMARYCMD=null
+  QUOTACHECKCMD=null
+  ALLOCCHECKCMD=null
+  if [[ ${RMQMessaging_Enable} == "on" ]]; then
+    RMQMessaging_LocationName="UGA"
+    RMQMessaging_ClusterName="sapelo2"
+    RMQMessaging_NcoHome=$WORK/local
+  fi
+  local THIS="platforms.sh>env_dispatch()>init_sapelo2()"
+  #ARCHIVE=enstorm_pedir_removal.sh
+  #ARCHIVEBASE=/corral-tacc/utexas/hurricane/ASGS
+  #ARCHIVEDIR=2022
+  #TDS=( tacc_tds )
+  MAKEJOBS=8
+}
 # Writes properties related to the combination of the HPC platform, the Operator,
 # and the THREDDS data server the results are to be posted to.
 writeTDSProperties()
@@ -587,7 +623,7 @@ writeTDSProperties()
 set_hpc() {
    local THIS="platforms.sh>set_hpc()"
    echo "$THIS: Setting the values of HPCENV and HPCENVSHORT."
-   fqdn=$(hostname --long)
+   fqdn=`hostname --long`
    echo "$THIS: The fully qualified domain name is ${fqdn}."
    HPCENV=null
    HPCENVSHORT=null
@@ -623,20 +659,20 @@ set_hpc() {
       HPCENV=qbc.loni.org
       HPCENVSHORT=queenbeeC
    fi
-   if [[ ${fqdn:0:4} == "smic" ]]; then
+   if [[ ${fqdn:0:4} = "smic" ]]; then
       HPCENV=supermic.hpc.lsu.edu
       HPCENVSHORT=supermic
    fi
-   if [[ ${fqdn:0:2} == "ht" ]]; then
+   if [[ ${fqdn:0:2} = "ht" ]]; then
       HPCENV=hatteras.renci.org
       HPCENVSHORT=hatteras
    fi
-   if [[ ${fqdn:0:5} == "jason" ]]; then
-      HPCENV=desktop.seahorsecoastal.com
-      HPCENVSHORT=desktop
+   if [[ ${fqdn:8:-8} = "gacrc" ]]; then
+      HPCENV=sapelo2.gacrc.uga.edu
+      HPCENVSHORT=sapelo2
    fi
-   if [ 1 -eq $(hostname --fqdn | grep -c soldier) ]; then
-      HPCENV=soldier.seahorsecoastal.com
+   if [[ ${fqdn:0:5} = "jason" ]]; then
+      HPCENV=desktop.seahorsecoastal.com
       HPCENVSHORT=desktop
    fi
    if [[ "${ASGS_MACHINE_NAME}" = "docker" ]]; then
@@ -645,7 +681,7 @@ set_hpc() {
    fi
    # this whole function will be replaced with guess, but for now ...
    if [[ $HPCENVSHORT = "null" ]]; then
-      plat=$($SCRIPTDIR/bin/guess platform)
+      plat=`$WORK/asgs/bin/guess platform`
       HPCENVSHORT=$plat
       HPCENV=$plat
    fi
@@ -665,6 +701,9 @@ env_dispatch() {
           ;;
   "hatteras") allMessage "$THIS: Hatteras (RENCI) configuration found."
           init_hatteras
+          ;;
+  "sapelo2") allMessage "$THIS: Sapelo2 (UGA) configuration found."
+          init_sapelo2
           ;;
   "supermike") allMessage "$THIS: Supermike (LSU) configuration found."
           init_supermike
@@ -714,7 +753,7 @@ env_dispatch() {
   "test") allMessage "$THIS: test environment (default) configuration found."
           init_test
            ;;
-  *) fatal "$THIS: '$HPCENVSHORT' is not a supported environment; currently supported options: stampede2, lonestar5, supermike, queenbee, supermic, hatteras, desktop, desktop-serial, docker, su_tds, lsu_ccr_tds, renci_tds, tacc_tds, tacc_tds2"
+  *) fatal "$THIS: '$HPCENVSHORT' is not a supported environment; currently supported options: stampede2, lonestar5, supermike, queenbee, supermic, hatteras, sapelo2, desktop, desktop-serial, docker, su_tds, lsu_ccr_tds, renci_tds, tacc_tds, tacc_tds2"
      ;;
   esac
 
@@ -730,7 +769,7 @@ env_dispatch() {
 # * doesn't affect environmenta "by reference" (implicitly)
 # * echo's "return" so it can be captured by called using $() syntax
 # e.g.,
-#   QUEUENAME=$(HPCQueueHints "$QUEUENAME" "$HPCENV" "$QOS" "$CPUREQUEST")
+#   QUEUENAME=$(HPCQueueHints "$QUEUENAME" "$HPCENV" "$QOS" "$CPUREQUEST") 
 HPC_Queue_Hint()
 {
    # default, returned if conditions not met
@@ -738,7 +777,7 @@ HPC_Queue_Hint()
    local HPCENV=$2
    local QOS=$3
    local CPUREQUEST=$4
-   case "$HPCENV" in
+   case "$HPCENV" in 
    "frontera.tacc.utexas.edu")
      # on frontera, if a job uses only 1 or 2 nodes, it must be submitted to the
      # "small" queue ... this includes wind-only parallel jobs ... the PPN
@@ -758,8 +797,8 @@ HPC_Queue_Hint()
        echo "single"
      else
        echo $DEFAULT_QUEUENAME
-     fi
-   ;;
+     fi 
+   ;; 
    *)
      echo $DEFAULT_QUEUENAME
    ;;
@@ -775,7 +814,7 @@ HPC_PPN_Hint()
    local HPCENV=$3
    local QOS=$4
    local DEFAULT_PPN=$5 # default, returned if conditions not met
-   case "$HPCENV" in
+   case "$HPCENV" in 
    "supermic.hpc.lsu.edu")
      if [[ "$QUEUENAME" == "priority" && "$QUEUEKIND" == "serial" ]]; then
        echo 20
@@ -789,7 +828,7 @@ HPC_PPN_Hint()
      else
        echo $DEFAULT_PPN
      fi
-   ;;
+   ;; 
    *)
      echo $DEFAULT_PPN
    ;;
@@ -802,7 +841,7 @@ HPC_PPN_Hint()
 # * doesn't affect environments "by reference" (implicitly)
 # * echo's "return" so it can be captured by called using $() syntax
 # e.g.,
-#   RESERVATION=$(HPC_Reservation_Hint "$RESERVATION" "$HPCENV" "$QOS" "$CPUREQUEST")
+#   RESERVATION=$(HPC_Reservation_Hint "$RESERVATION" "$HPCENV" "$QOS" "$CPUREQUEST") 
 HPC_Reservation_Hint()
 {
    # default, returned if conditions not met
@@ -810,7 +849,7 @@ HPC_Reservation_Hint()
    local HPCENV=$2
    local QOS=$3
    local CPUREQUEST=$4
-   case "$HPCENV" in
+   case "$HPCENV" in 
    "frontera.tacc.utexas.edu")
      # on frontera, if a job uses only 1 or 2 nodes, it must be submitted to the
      # "small" queue ... this includes wind-only parallel jobs ... the PPN

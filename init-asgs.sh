@@ -30,6 +30,7 @@ echo "supermic       - SuperMIC (LSU HPC)"  # smic
 echo "lonestar5      - Lonestar (TACC)"     # ls5
 echo "stampede2      - Stampede2 (TACC)"    # stampede2
 echo "frontera       - Frontera (TACC)"     # frontera
+echo "sapelo2        - Sapelo2 (UGA)"       # sapelo2
 echo "desktop        - desktop"
 echo "desktop-serial - desktop-serial"
 echo "poseidon       - Poseidon"
@@ -80,6 +81,10 @@ case "$platform" in
     ;;
   queenbee|queenbeeC|supermic)
     WORK=${WORK:-"/work/$USER"}
+    SCRATCH=${SCRATCH:-"/scratch/$USER"}
+    ;;
+  sapelo2)
+    WORK=${WORK:-$HOME}
     SCRATCH=${SCRATCH:-"/scratch/$USER"}
     ;;
   frontera|lonestar5|stampede2)

@@ -127,8 +127,7 @@ sub _parse_options {
           compiler=s
           debug
           force
-          home=s
-          tmpdir=s
+          home
           install-path=s
           list-steps
           machinename=s
@@ -592,7 +591,6 @@ sub get_steps {
     my $asgs_install_path = $opts_ref->{'install-path'};
     my $asgs_compiler     = $opts_ref->{compiler};
     my $asgs_home         = $opts_ref->{home};
-    my $asgs_tmpdir       = $opts_ref->{tmpdir} // q{/tmp};
     my $asgs_machine_name = $opts_ref->{machinename};
     my $makejobs          = $opts_ref->{'make-jobs'};
     my $brewflags         = $opts_ref->{brewflags};
@@ -600,7 +598,8 @@ sub get_steps {
     my $adcirc_git_url    = $opts_ref->{'adcirc-git-url'} // q{git@github.com:adcirc};
     my $adcirc_git_branch = $opts_ref->{'adcirc-git-branch'};
     my $adcirc_git_repo   = $opts_ref->{'adcirc-git-repo'};
-    my $pythonpath        = qq{$asgs_install_path};
+    my $pythonversion     = q{2.7.18};
+    my $pythonpath        = qq{$asgs_install_path/python-$pythonversion};
 
     # generator for PATH string as an anonymous subroutine,
     #   Dev note: ADD new PATHs here using the existing pattern
@@ -679,7 +678,6 @@ sub get_steps {
                 ASGS_META_DIR      => { value => qq{$asgs_home/.asgs},                   how => q{replace} },              # where to track ADCIRC installs build information (always)
                 ASGS_BREW_FLAGS    => { value => qq{'$brewflags'},                       how => q{replace} },              # make brew flags available for later use
                 ASGS_HOME          => { value => qq{$asgs_home},                         how => q{replace} },              # used in preference of $HOME in most cases
-                ASGS_TMPDIR        => { value => qq{$asgs_tmpdir},                         how => q{replace} },              # used in preference of $TMPDIR in most cases
                 ASGS_MACHINE_NAME  => { value => qq{$asgs_machine_name},                 how => q{replace} },              # machine referred to as in platforms.sh & cmplrflags.mk
                 ASGS_COMPILER      => { value => qq{$asgs_compiler},                     how => q{replace} },              # compiler family designated during asgs-brew.pl build
                 ASGS_INSTALL_PATH  => { value => qq{$asgs_install_path},                 how => q{replace} },              # where asgs-brew.pl installs supporting bins & libs
@@ -726,7 +724,7 @@ sub get_steps {
                 CPPFLAGS => { value => qq{-I$asgs_install_path/include}, how => q{append}, separator => q{ } },
                 LDFLAGS  => { value => qq{-L$asgs_install_path/lib},     how => q{append}, separator => q{ } },
 
-                # the following HDF5* vars are needed in the environment for any netCDF4 python modules
+                # the following HDF5* vars are needed for netCDF4 python module
                 HDF5_DIR    => { value => qq{$asgs_install_path},         how => q{replace} },
                 HDF5_LIBDIR => { value => qq{$asgs_install_path/lib},     how => q{replace} },
                 HDF5_INCDIR => { value => qq{$asgs_install_path/include}, how => q{replace} },
@@ -759,7 +757,7 @@ sub get_steps {
             # augment existing %ENV (cumulative)
             export_ENV => {
                 NETCDFHOME     => { value => qq{$asgs_install_path},         how => q{replace} },
-                NETCDF4_DIR    => { value => qq{$asgs_install_path},         how => q{replace} },    # needed for any netCDF4 python module
+                NETCDF4_DIR    => { value => qq{$asgs_install_path},         how => q{replace} },    # needed for netCDF4 python module
                 NETCDF4_LIBDIR => { value => qq{$asgs_install_path/lib},     how => q{replace} },    # needed for netCDF4 python module
                 NETCDF4_INCDIR => { value => qq{$asgs_install_path/include}, how => q{replace} },    # needed for netCDF4 python module
             },
@@ -946,29 +944,27 @@ sub get_steps {
             },
         },
         {
-            # note: updating the python 3 version support must be done here and in the
-            # ./cloud/general/init-python3.sh script
-            # note: this installs python 3
-            key         => q{python3},
-            name        => q{step for installing python 3 and required modules},
-            description => q{install python 3 locally and install required modules},
+            # Note: updating the Python 2 version support must be done here and in the
+            # ./cloud/general/init-python.sh script
+            # Note: this installs Python 2, Python 3 is currently not supported (needs a new step entry)
+            key         => q{python},
+            name        => q{Step for installing Python 2.7.18 and required modules},
+            description => q{Install Python 2.7.18 locally and install required modules},
             pwd         => q{./},
-            export_env  => {
+            export_ENV  => {
 
-                # putting this in $home/python310/asgs/build reflects what perlbrew's default
+                # putting this in $HOME/python27/asgs/build reflects what perlbrew's default
                 # behavior is doing by putting perl into $HOME/perl5/perlbrew/build/perl-$version
                 PYTHONPATH => { value => $pythonpath,                               how => q{replace} },
                 PATH       => { value => qq{$pythonpath/bin:$asgs_home/.local/bin}, how => q{prepend} },
             },
-            command             => qq{bash ./cloud/general/init-python3.sh install $pythonpath},
-            clean               => qq{bash ./cloud/general/init-python3.sh clean   $pythonpath},
+            command             => qq{bash ./cloud/general/init-python.sh install $pythonpath $pythonversion},
+            clean               => qq{bash ./cloud/general/init-python.sh clean   $pythonpath $pythonversion},
             skip_if             => sub { 0 },
             precondition_check  => sub { 1 },
             postcondition_check => sub {
                 local $?;
-
-                # just invokes interpreter for version
-                system(qq{python3.7 cloud/general/t/netcdf4-bench.py});
+                system(qq{./cloud/general/t/verify-python-modules.py 2>&1});
 
                 # look for zero exit code on success
                 my $exit_code = ( $? >> 8 );
@@ -1000,31 +996,31 @@ sub get_steps {
                 return ( defined $exit_code and $exit_code == 0 ) ? 1 : 0;
             },
         },
-        {
-            key         => q{gnuplot},
-            name        => q{Step for installing gnuplot},
-            description => q{Install gnuplot (commandline only)},
-            pwd         => q{./},
-            command     => qq{bash ./cloud/general/init-gnuplot-noX11.sh $asgs_install_path gfortran 4},
-            clean       => qq{bash ./cloud/general/init-gnuplot-noX11.sh $asgs_install_path clean},
-            skip_if     => sub {
-                local $?;
-                system(qq{$asgs_install_path/bin/gnuplot --version > /dev/null 2>&1});
+        #{
+        #    key         => q{gnuplot},
+        #    name        => q{Step for installing gnuplot},
+        #    description => q{Install gnuplot (commandline only)},
+        #    pwd         => q{./},
+        #    command     => qq{bash ./cloud/general/init-gnuplot-noX11.sh $asgs_install_path gfortran 4},
+        #    clean       => qq{bash ./cloud/general/init-gnuplot-noX11.sh $asgs_install_path clean},
+        #    skip_if     => sub {
+        #        local $?;
+        #        system(qq{$asgs_install_path/bin/gnuplot --version > /dev/null 2>&1});
 
-                # look for zero exit code on success
-                my $exit_code = ( $? >> 8 );
-                return ( defined $exit_code and $exit_code == 0 ) ? 1 : 0;
-            },
-            precondition_check  => sub { 1 },
-            postcondition_check => sub {
-                local $?;
-                system(qq{$asgs_install_path/bin/gnuplot --version > /dev/null 2>&1});
+        #         # look for zero exit code on success
+        #        my $exit_code = ( $? >> 8 );
+        #        return ( defined $exit_code and $exit_code == 0 ) ? 1 : 0;
+        #    },
+        #    precondition_check  => sub { 1 },
+        #    postcondition_check => sub {
+        #        local $?;
+        #        system(qq{$asgs_install_path/bin/gnuplot --version > /dev/null 2>&1});
 
-                # look for zero exit code on success
-                my $exit_code = ( $? >> 8 );
-                return ( defined $exit_code and $exit_code == 0 ) ? 1 : 0;
-            },
-        },
+        #        # look for zero exit code on success
+        #        my $exit_code = ( $? >> 8 );
+        #        return ( defined $exit_code and $exit_code == 0 ) ? 1 : 0;
+        #    },
+        #},
         {
             key         => q{units},
             name        => q{Step for installing units},
