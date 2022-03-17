@@ -13,7 +13,6 @@
 #SBATCH --job-name="%jobtype%.%scenario%"
 #SBATCH --time=%walltime%
 #SBATCH --ntasks=%totalcpu%
-#SBATCH --nodes=%nnodes%
 #SBATCH --partition=%queuename%
 #SBATCH --output=%advisdir%/%scenario%/%jobtype%.out
 #SBATCH --mail-user=%notifyuser%
